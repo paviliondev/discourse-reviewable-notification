@@ -1,0 +1,3 @@
+plugins:
+  reviewable_notification_enabled:
+    default: true
