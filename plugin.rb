@@ -13,28 +13,30 @@ after_initialize do
     def notify(count, user_ids)
       super
       return unless SiteSetting.reviewable_notification_enabled
+      # if job is enqueued multiple times, we make sure that this code doesn't run more than once simultaneously
+      DistributedMutex.synchronize("custom_send_reviewable_notification") do
+        if SiteSetting.notify_about_flags_after > 0
+          reviewable_ids = Reviewable
+            .pending
+            .default_visible
+            .order('id DESC')
+            .pluck(:id)
 
-      if SiteSetting.notify_about_flags_after > 0
-        reviewable_ids = Reviewable
-          .pending
-          .default_visible
-          .order('id DESC')
-          .pluck(:id)
+          if reviewable_ids.size > 0 && self.class.last_notified_id < reviewable_ids[0]
+            usernames = active_moderator_usernames
+            mentions = usernames.size > 0 ? "@#{usernames.join(', @')} " : ""
 
-        if reviewable_ids.size > 0 && self.class.last_notified_id < reviewable_ids[0]
-          usernames = active_moderator_usernames
-          mentions = usernames.size > 0 ? "@#{usernames.join(', @')} " : ""
+            @sent_reminder = PostCreator.create(
+              Discourse.system_user,
+              target_group_names: Group[:moderators].name,
+              archetype: Archetype.private_message,
+              subtype: TopicSubtype.system_message,
+              title: I18n.t('reviewables_reminder.subject_template', count: reviewable_ids.size),
+              raw: mentions + I18n.t('reviewables_reminder.submitted', count: SiteSetting.notify_about_flags_after, base_path: Discourse.base_path)
+            ).present?
 
-          @sent_reminder = PostCreator.create(
-            Discourse.system_user,
-            target_group_names: Group[:moderators].name,
-            archetype: Archetype.private_message,
-            subtype: TopicSubtype.system_message,
-            title: I18n.t('reviewables_reminder.subject_template', count: reviewable_ids.size),
-            raw: mentions + I18n.t('reviewables_reminder.submitted', count: SiteSetting.notify_about_flags_after, base_path: Discourse.base_path)
-          ).present?
-
-          self.class.last_notified_id = reviewable_ids[0]
+            self.class.last_notified_id = reviewable_ids[0]
+          end
         end
       end
     end
@@ -51,7 +53,7 @@ after_initialize do
   end
 
   add_class_method(Jobs::NotifyReviewable, :last_notified_key) do
-    "last_notified_reviewable_id"
+    "custom_last_notified_reviewable_id"
   end
 
   add_class_method(Jobs::NotifyReviewable, :clear_key) do
