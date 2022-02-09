@@ -31,8 +31,8 @@ after_initialize do
               target_group_names: Group[:moderators].name,
               archetype: Archetype.private_message,
               subtype: TopicSubtype.system_message,
-              title: I18n.t('reviewables_reminder.subject_template', count: reviewable_ids.size),
-              raw: mentions + I18n.t('reviewables_reminder.submitted', count: SiteSetting.notify_about_flags_after, base_path: Discourse.base_path)
+              title: I18n.t('system_messages.reviewables_reminder.subject_template'),
+              raw: I18n.t('system_messages.reviewables_reminder.text_body_template', mentions: mentions, count: SiteSetting.notify_about_flags_after, base_url: Discourse.base_url)
             ).present?
 
             self.class.last_notified_id = reviewable_ids[0]
